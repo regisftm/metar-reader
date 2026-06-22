@@ -1,14 +1,36 @@
+"""
+METAR Reader — Flask web application.
+
+Accepts a Canadian ICAO airport code, fetches the current METAR
+observation from the Nav Canada weather API, decodes it with
+metar_decoder, and renders a plain-English weather report.
+"""
+
+import re
+
 from flask import Flask, render_template, request
 import requests
+
 from metar_decoder import decode_metar
 
 app = Flask(__name__)
 
+# Nav Canada public weather API — returns the latest METAR for a given site.
+# Query parameters: site=<ICAO code>, alpha=metar
 NAVCANADA_API = 'https://plan.navcanada.ca/weather/api/alpha/'
 
 
-def fetch_metar(station_code: str):
-    """Return (raw_metar_text, error_message). One will be None."""
+def fetch_metar(station_code: str) -> tuple[str | None, str | None]:
+    """Fetch the raw METAR text for a station from the Nav Canada API.
+
+    Args:
+        station_code: 3–4 character ICAO airport identifier (e.g. "CYYC").
+
+    Returns:
+        A (raw_text, error_message) tuple. On success, raw_text is the
+        METAR string and error_message is None. On failure, raw_text is
+        None and error_message describes what went wrong.
+    """
     try:
         response = requests.get(
             NAVCANADA_API,
@@ -19,6 +41,8 @@ def fetch_metar(station_code: str):
         response.raise_for_status()
         data = response.json()
 
+        # The API returns {"data": [...]} where each item may be a dict
+        # with a "text" key or, in older responses, a plain string.
         items = data.get('data') or []
         for item in items:
             if isinstance(item, dict):
@@ -30,7 +54,8 @@ def fetch_metar(station_code: str):
 
         return None, (
             f'No METAR data found for {station_code}. '
-            'This service covers Canadian airports (ICAO codes starting with C, e.g. CYYC, CYYZ, CYVR).'
+            'This service covers Canadian airports '
+            '(ICAO codes starting with C, e.g. CYYC, CYYZ, CYVR).'
         )
 
     except requests.exceptions.Timeout:
@@ -48,12 +73,19 @@ def fetch_metar(station_code: str):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    """Render the main page.
+
+    GET:  Display the search form.
+    POST: Validate the submitted airport code, fetch the METAR, decode
+          it, and pass the structured result to the template.
+    """
     metar = None
     error = None
     station = ''
 
     if request.method == 'POST':
         station = request.form.get('station', '').strip().upper()
+
         if not station:
             error = 'Please enter an airport code.'
         elif not re.match(r'^[A-Z0-9]{3,4}$', station):
@@ -65,8 +97,6 @@ def index():
 
     return render_template('index.html', metar=metar, error=error, station=station)
 
-
-import re
 
 if __name__ == '__main__':
     app.run(debug=True)
