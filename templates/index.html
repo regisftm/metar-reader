@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>METAR Reader — Aviation Weather in Plain English</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #1a6fa8 0%, #3a9fd4 35%, #7ecbf0 65%, #c9e8f7 100%);
+      color: #1a2a3a;
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      padding: 3rem 1rem 2rem;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,.25);
+      letter-spacing: -0.5px;
+    }
+    header p {
+      margin-top: .5rem;
+      color: rgba(255,255,255,.82);
+      font-size: 1.05rem;
+    }
+
+    /* ── Search card ── */
+    .search-card {
+      max-width: 520px;
+      margin: 0 auto 2rem;
+      padding: 0 1rem;
+    }
+    .search-form {
+      display: flex;
+      gap: .5rem;
+      background: rgba(255,255,255,.92);
+      border-radius: 16px;
+      padding: .5rem .5rem .5rem .9rem;
+      box-shadow: 0 8px 32px rgba(0,60,120,.18);
+    }
+    .search-form input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #1a2a3a;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      outline: none;
+    }
+    .search-form input::placeholder {
+      color: #9ab;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .search-form button {
+      background: #1a6fa8;
+      color: #fff;
+      border: none;
+      border-radius: 11px;
+      padding: .65rem 1.4rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+      white-space: nowrap;
+    }
+    .search-form button:hover { background: #155a8a; }
+
+    .hint {
+      text-align: center;
+      color: rgba(255,255,255,.7);
+      font-size: .82rem;
+      margin-top: .5rem;
+    }
+
+    /* ── Error banner ── */
+    .error-banner {
+      max-width: 720px;
+      margin: 0 auto 1.5rem;
+      padding: 0 1rem;
+    }
+    .error-banner p {
+      background: rgba(220,53,69,.12);
+      border: 1px solid rgba(220,53,69,.4);
+      border-radius: 10px;
+      padding: .8rem 1.1rem;
+      color: #fff;
+      font-size: .95rem;
+      backdrop-filter: blur(4px);
+    }
+    .error-banner p::before { content: '⚠️  '; }
+
+    /* ── Main result card ── */
+    .result-wrapper {
+      max-width: 720px;
+      margin: 0 auto 3rem;
+      padding: 0 1rem;
+    }
+
+    .weather-card {
+      background: rgba(255,255,255,.95);
+      border-radius: 20px;
+      box-shadow: 0 12px 40px rgba(0,50,100,.2);
+      overflow: hidden;
+    }
+
+    /* Station header */
+    .station-header {
+      background: linear-gradient(135deg, #1a6fa8, #2a9dd4);
+      color: #fff;
+      padding: 1.4rem 1.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+    .station-header .code {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 3px;
+    }
+    .station-header .meta {
+      font-size: .85rem;
+      opacity: .85;
+      text-align: right;
+    }
+    .station-header .meta strong { display: block; font-size: .95rem; opacity: 1; }
+
+    /* Summary banner */
+    .summary-banner {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.2rem 1.6rem;
+      background: #f0f7ff;
+      border-bottom: 1px solid #d8eaf8;
+    }
+    .summary-banner .icon { font-size: 2.8rem; line-height: 1; }
+    .summary-banner .text {
+      font-size: 1rem;
+      color: #2a4a6a;
+      line-height: 1.5;
+    }
+    .summary-banner .text strong {
+      display: block;
+      font-size: 1.1rem;
+      color: #1a3550;
+      margin-bottom: .15rem;
+    }
+
+    /* Grid of detail cards */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      background: #deeaf5;
+    }
+
+    .detail-cell {
+      background: #fff;
+      padding: 1.1rem 1.3rem;
+    }
+    .detail-cell .label {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #7a98b5;
+      margin-bottom: .35rem;
+    }
+    .detail-cell .value {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #1a2a3a;
+      line-height: 1.4;
+    }
+    .detail-cell .sub {
+      font-size: .82rem;
+      color: #5a7a9a;
+      margin-top: .15rem;
+    }
+    .detail-cell .cell-icon {
+      font-size: 1.3rem;
+      margin-bottom: .3rem;
+    }
+
+    /* Sky conditions list */
+    .sky-list {
+      padding: 0 1.6rem 1.2rem;
+      border-bottom: 1px solid #deeaf5;
+    }
+    .sky-list h3 {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #7a98b5;
+      padding: 1rem 0 .5rem;
+    }
+    .sky-list ul {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+    }
+    .sky-list li {
+      background: #eef5fc;
+      border: 1px solid #c8dff0;
+      border-radius: 8px;
+      padding: .3rem .75rem;
+      font-size: .9rem;
+      color: #2a4a6a;
+    }
+
+    /* Weather phenomena */
+    .wx-list {
+      padding: 0 1.6rem 1.2rem;
+      border-bottom: 1px solid #deeaf5;
+    }
+    .wx-list h3 {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #7a98b5;
+      padding: 1rem 0 .5rem;
+    }
+    .wx-list ul {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+    }
+    .wx-pill {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: .3rem .75rem;
+      font-size: .9rem;
+      color: #664d03;
+      font-weight: 500;
+    }
+
+    /* Raw METAR */
+    .raw-section {
+      padding: 1rem 1.6rem 1.3rem;
+    }
+    .raw-section details summary {
+      cursor: pointer;
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #7a98b5;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+    .raw-section details summary::before {
+      content: '▶';
+      font-size: .6rem;
+      transition: transform .2s;
+    }
+    .raw-section details[open] summary::before { transform: rotate(90deg); }
+    .raw-section details summary::-webkit-details-marker { display: none; }
+    .raw-section pre {
+      margin-top: .6rem;
+      background: #f4f8fc;
+      border: 1px solid #d0e4f0;
+      border-radius: 8px;
+      padding: .8rem 1rem;
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: .85rem;
+      color: #2a4a6a;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    /* Auto tag */
+    .auto-tag {
+      display: inline-block;
+      background: rgba(255,255,255,.2);
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 6px;
+      padding: .15rem .5rem;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 1.5rem 1rem 2rem;
+      color: rgba(255,255,255,.55);
+      font-size: .8rem;
+    }
+
+    @media (max-width: 480px) {
+      header h1 { font-size: 1.7rem; }
+      .station-header .code { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>✈️ METAR Reader</h1>
+  <p>Type an airport code and get a plain-English weather report</p>
+</header>
+
+<div class="search-card">
+  <form class="search-form" method="post" autocomplete="off">
+    <input
+      type="text"
+      name="station"
+      placeholder="e.g. CYYC, CYYZ, CYVR"
+      maxlength="4"
+      value="{{ station }}"
+      autofocus
+      aria-label="Airport ICAO code"
+    />
+    <button type="submit">Get Weather</button>
+  </form>
+  <p class="hint">Canadian airports use 4-letter ICAO codes starting with C</p>
+</div>
+
+{% if error %}
+<div class="error-banner">
+  <p>{{ error }}</p>
+</div>
+{% endif %}
+
+{% if metar %}
+<div class="result-wrapper">
+  <div class="weather-card">
+
+    <!-- Station header -->
+    <div class="station-header">
+      <div>
+        <div class="code">{{ metar.station }}</div>
+        {% if metar.auto %}<span class="auto-tag">Automated Station</span>{% endif %}
+      </div>
+      <div class="meta">
+        {% if metar.time %}
+          <strong>{{ metar.time }}{% if metar.time_utc_hour is not none %} · <span id="local-time"></span>{% endif %}</strong>
+          Observation time
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Summary banner -->
+    <div class="summary-banner">
+      <div class="icon">{{ metar.sky_icon }}</div>
+      <div class="text">
+        <strong>{{ metar.sky_summary }}{% if metar.weather %} with {{ metar.weather | join(', ') }}{% endif %}</strong>
+        {{ metar.summary }}
+      </div>
+    </div>
+
+    <!-- Detail grid -->
+    <div class="detail-grid">
+
+      <!-- Temperature -->
+      {% if metar.temperature_c is not none %}
+      <div class="detail-cell">
+        <div class="cell-icon">🌡️</div>
+        <div class="label">Temperature</div>
+        <div class="value">{{ metar.temperature_c }}°C / {{ metar.temperature_f }}°F</div>
+        {% if metar.dewpoint_c is not none %}
+        <div class="sub">Dew point: {{ metar.dewpoint_c }}°C ({{ metar.dewpoint_f }}°F)</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Wind -->
+      {% if metar.wind %}
+      <div class="detail-cell">
+        <div class="cell-icon">💨</div>
+        <div class="label">Wind</div>
+        <div class="value">
+          {% if metar.wind_speed_mph is not none and metar.wind_speed_mph == 0 %}
+            Calm
+          {% else %}
+            {{ metar.wind_speed_mph }} mph
+            {% if metar.wind_gust_mph %}
+              <span style="color:#c0392b"> (gusts {{ metar.wind_gust_mph }} mph)</span>
+            {% endif %}
+          {% endif %}
+        </div>
+        {% if metar.wind_direction and metar.wind_direction != 'calm' %}
+        <div class="sub">From the {{ metar.wind_direction }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Visibility -->
+      {% if metar.visibility %}
+      <div class="detail-cell">
+        <div class="cell-icon">👁️</div>
+        <div class="label">Visibility</div>
+        <div class="value">{{ metar.visibility.split('—')[0].strip() }}</div>
+        {% if '—' in metar.visibility %}
+        <div class="sub">{{ metar.visibility.split('—')[1].strip() | capitalize }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Altimeter -->
+      {% if metar.altimeter %}
+      <div class="detail-cell">
+        <div class="cell-icon">🔵</div>
+        <div class="label">Pressure</div>
+        <div class="value">{{ metar.altimeter }}</div>
+        <div class="sub">Altimeter setting</div>
+      </div>
+      {% endif %}
+
+    </div><!-- /detail-grid -->
+
+    <!-- Sky conditions -->
+    {% if metar.sky %}
+    <div class="sky-list">
+      <h3>☁️ Sky Conditions</h3>
+      <ul>
+        {% for layer in metar.sky %}
+        <li>{{ layer.description }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Weather phenomena -->
+    {% if metar.weather %}
+    <div class="wx-list">
+      <h3>🌧️ Present Weather</h3>
+      <ul>
+        {% for wx in metar.weather %}
+        <li class="wx-pill">{{ wx | capitalize }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Raw METAR -->
+    <div class="raw-section">
+      <details>
+        <summary>Raw METAR string</summary>
+        <pre>{{ metar.raw }}</pre>
+      </details>
+    </div>
+
+  </div><!-- /weather-card -->
+</div>
+{% endif %}
+
+{% if metar and metar.time_utc_hour is not none %}
+<script>
+  (function () {
+    var now = new Date();
+    var obs = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      {{ metar.time_day }},
+      {{ metar.time_utc_hour }},
+      {{ metar.time_utc_minute }}
+    ));
+    // If the day is in the future (month rollover edge case), step back one month
+    if (obs > now + 12 * 3600000) {
+      obs.setUTCMonth(obs.getUTCMonth() - 1);
+    }
+    var el = document.getElementById('local-time');
+    if (el) {
+      el.textContent = obs.toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+      }) + ' local';
+    }
+  })();
+</script>
+{% endif %}
+
+<footer>
+  Data sourced from <strong>Nav Canada</strong> · For flight planning only · Not for operational use
+</footer>
+
+</body>
+</html>
