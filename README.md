@@ -71,6 +71,40 @@ Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
 ---
 
+## Tests
+
+The project includes 115 unit tests covering the decoder logic and the Flask application layer.
+
+### Install test dependencies
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Run the tests
+
+```bash
+pytest tests/ -v
+```
+
+### Test coverage
+
+#### `tests/test_metar_decoder.py`
+
+All helper functions (`_parse_temp`, `_to_mph`, `_format_vis_sm`, `_decode_weather_group`,
+`_decode_sky`, `_dominant_sky`, `_degrees_to_compass`) plus `decode_metar` end-to-end with
+synthetic METAR strings covering: typical clear day, CAVOK, thunderstorm with gusts, winter
+(calm wind / negative temps / snow), fog with fractional visibility, variable wind with range,
+NIL report, AUTO station, and metric (ICAO/European) observations.
+
+#### `tests/test_app.py`
+
+`fetch_metar` with a mocked `requests.get` (success with dict and string items, empty data,
+timeout, connection error, HTTP 404/500, invalid JSON); Flask route validation and rendering
+using the built-in test client.
+
+---
+
 ## Usage
 
 1. Enter a **4-letter ICAO airport code** in the search bar (e.g. `CYYC`, `CYYZ`, `CYVR`).
@@ -98,11 +132,15 @@ Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
 ```
 metar-reader/
-├── app.py              # Flask routes and Nav Canada API integration
-├── metar_decoder.py    # METAR string parser and plain-English generator
-├── requirements.txt    # Python dependencies
-└── templates/
-    └── index.html      # Single-page UI with embedded CSS
+├── app.py                  # Flask routes and Nav Canada API integration
+├── metar_decoder.py        # METAR string parser and plain-English generator
+├── requirements.txt        # Runtime dependencies
+├── requirements-dev.txt    # Test dependencies (pytest, pytest-cov)
+├── templates/
+│   └── index.html          # Single-page UI with embedded CSS
+└── tests/
+    ├── test_metar_decoder.py   # Unit tests for the decoder (92 tests)
+    └── test_app.py             # Unit tests for the Flask app (23 tests)
 ```
 
 ---
